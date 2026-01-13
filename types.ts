@@ -1,3 +1,4 @@
+
 export enum InningZone {
   EARLY = '序盤', // 1-3
   MIDDLE = '中盤', // 4-6
@@ -34,13 +35,20 @@ export enum ActionType {
 }
 
 export enum ResultType {
+  // Batted / Finished Events
   GROUNDER = '内野ゴロ',
   FLY = '外野フライ',
   LINER = 'ライナー',
-  WALK = '四球',
-  STRIKEOUT = '三振',
+  WALK = '四球', // Ball 4
+  STRIKEOUT = '三振', // Strike 3
   ERROR = '失策',
-  HIT = '安打', // Added for completeness though not explicitly in prompt list, useful for tracking
+  HIT = '安打',
+  
+  // Pitch Events (Continuing AB)
+  TAKE_BALL = 'ボール(見送)',
+  TAKE_STRIKE = 'ストライク(見送)',
+  SWING_STRIKE = '空振り',
+  FOUL = 'ファウル',
 }
 
 export interface GameState {
@@ -49,7 +57,9 @@ export interface GameState {
   outs: 0 | 1 | 2;
   runners: RunnerState;
   scoreDiff: ScoreDiff;
-  opponent: string;
+  opponent: string; // Legacy/Display purpose
+  offenseTeam?: string;
+  defenseTeam?: string;
   balls: 0 | 1 | 2 | 3;
   strikes: 0 | 1 | 2;
 }
@@ -62,11 +72,20 @@ export interface PlayLog {
   action: ActionType;
   resultType: ResultType;
   runsScored: number;
+  
+  // Next State
   nextOuts: 0 | 1 | 2 | 3;
   nextRunners: RunnerState;
+  nextBalls: 0 | 1 | 2 | 3; // Added
+  nextStrikes: 0 | 1 | 2;   // Added
+
+  pitchCount?: number; // Total pitches in this AB (optional, for bulletin mode)
+
   currentRE: number;
   nextRE: number;
   pev: number; // Player Evaluation Value
+  offenseTeam?: string;
+  defenseTeam?: string;
 }
 
 export interface StrategyStat {
@@ -74,6 +93,7 @@ export interface StrategyStat {
   count: number;
   avgPEV: number;
   successRate: number; // Simplified concept of "success" (e.g., positive PEV or advance)
+  avgPitches?: number; // Added tracking for stickiness
 }
 
 // Map key: "Outs_Runners" (e.g., "0_100") -> Value: Expected Runs

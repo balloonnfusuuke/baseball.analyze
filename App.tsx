@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { PlayLog } from './types';
 import GameInput from './components/GameInput';
@@ -116,8 +117,11 @@ const App: React.FC = () => {
               
               {/* Concept */}
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-900">
-                <p className="font-bold mb-1">💡 このシステムは「戦略の評価」に特化しています</p>
-                <p>スコアブックのように全ての球を記録する必要はありません。「ボールカウント」は画面上で随時更新し、<span className="font-bold underline">「プレー（打席完了、盗塁、エラーなど）」が完了した時だけ</span>ログを保存します。</p>
+                <p className="font-bold mb-1">💡 このシステムは「戦略の正当性」を評価します</p>
+                <p>
+                  結果（ヒットやアウト）だけでなく、<span className="font-bold">「その作戦によって状況がどう良くなったか（PEV）」</span>を数値化します。<br/>
+                  今回のアップデートで、<span className="font-bold underline">1球ごとのカウント変化（ボール・ストライク）</span>も評価対象になりました。「待球」作戦の価値も正確に算出できます。
+                </p>
               </div>
 
               {/* Steps */}
@@ -130,15 +134,16 @@ const App: React.FC = () => {
                     <div className="w-px h-full bg-slate-200"></div>
                   </div>
                   <div className="pb-4">
-                    <h3 className="font-bold text-lg text-slate-800 mb-2">状況のセット・カウント更新</h3>
-                    <p className="text-slate-600 mb-3 text-sm">
-                      現在のアウト数、ランナー、ボールカウントを入力します。
+                    <h3 className="font-bold text-lg text-slate-800 mb-2">状況入力 (Before)</h3>
+                    <p className="text-slate-600 mb-2 text-sm">
+                      現在のアウト・ランナー・カウント・対戦チームを入力します。
                     </p>
                     <div className="bg-slate-100 p-3 rounded border border-slate-200 text-sm">
-                      <ul className="list-disc list-inside space-y-1 text-slate-700">
-                        <li><strong>ボール・ストライク・ファウル:</strong> ランプをタップして更新するだけでOKです（記録ボタンを押す必要はありません）。</li>
-                        <li><strong>AIコーチ:</strong> 迷った時は右側の「AI Coach」ボタンで作戦のヒントを得られます。</li>
-                      </ul>
+                       <p className="font-bold text-slate-700 mb-1">ポイント:</p>
+                       <ul className="list-disc list-inside space-y-1 text-slate-600">
+                         <li>画面左上のRE数値は「その状況での平均期待得点」です。</li>
+                         <li>ビジター/ホームを切り替えると、攻撃チームが自動判定されます。</li>
+                       </ul>
                     </div>
                   </div>
                 </div>
@@ -150,15 +155,21 @@ const App: React.FC = () => {
                     <div className="w-px h-full bg-slate-200"></div>
                   </div>
                   <div className="pb-4">
-                    <h3 className="font-bold text-lg text-slate-800 mb-2">結果入力へ進む (Commit)</h3>
-                    <p className="text-slate-600 mb-3 text-sm">
-                      以下のイベントが発生したら、画面下部の黒いボタン<strong>「結果入力へ進む」</strong>を押します。
+                    <h3 className="font-bold text-lg text-slate-800 mb-2">結果入力 (After)</h3>
+                    <p className="text-slate-600 mb-2 text-sm">
+                      「結果入力へ進む」を押し、作戦と結果を選びます。
                     </p>
-                    <div className="flex flex-wrap gap-2 text-xs font-bold text-slate-600">
-                      <span className="bg-white border px-2 py-1 rounded">打撃完了（ヒット/アウト）</span>
-                      <span className="bg-white border px-2 py-1 rounded">盗塁</span>
-                      <span className="bg-white border px-2 py-1 rounded">牽制死</span>
-                      <span className="bg-white border px-2 py-1 rounded">パスボール進塁</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                       <div className="bg-white border p-2 rounded">
+                          <span className="block font-bold text-blue-600 mb-1">打席完了ログ</span>
+                          <p className="text-xs text-slate-500">
+                              一球速報のカウント(2-2など)を入力すると、<span className="font-bold underline">自動で投球数(5球)が計算されます</span>。ファウル等でさらに粘った場合は手動で加算してください。
+                          </p>
+                       </div>
+                       <div className="bg-white border p-2 rounded">
+                          <span className="block font-bold text-green-600 mb-1">1球ごとログ（推奨）</span>
+                          <p className="text-xs text-slate-500">「待球」→「ボール（見送）」など。1球ごとに記録することで、粘りの価値を評価できます。</p>
+                       </div>
                     </div>
                   </div>
                 </div>
@@ -169,27 +180,14 @@ const App: React.FC = () => {
                     <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-lg">3</div>
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-slate-800 mb-2">詳細記録と保存</h3>
-                    <p className="text-slate-600 mb-3 text-sm">
-                      画面が切り替わります。実際に行った「作戦」と「結果」を入力してください。
+                    <h3 className="font-bold text-lg text-slate-800 mb-2">保存・分析</h3>
+                    <p className="text-slate-600 mb-2 text-sm">
+                      記録するとPEV（貢献度）が計算され、次回の状況に自動で遷移します。
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                        <span className="block font-bold text-slate-700 mb-1">入力項目</span>
-                        <ul className="list-disc list-inside text-slate-600">
-                          <li>実行した作戦（強攻、バントなど）</li>
-                          <li>打球結果（ゴロ、フライ、三振など）</li>
-                          <li>入った点数</li>
-                          <li>次（プレー後）のアウト・ランナー状況</li>
-                        </ul>
-                      </div>
-                      <div className="flex items-center justify-center bg-green-50 rounded border border-green-100 p-3">
-                         <div className="text-center">
-                            <Save className="w-6 h-6 text-green-600 mx-auto mb-1" />
-                            <span className="font-bold text-green-700 block">記録する (Save)</span>
-                            <span className="text-xs text-green-600">PEV（貢献度）が自動計算されます</span>
-                         </div>
-                      </div>
+                    <div className="bg-yellow-50 p-3 rounded border border-yellow-100 text-sm text-yellow-800">
+                       <span className="font-bold">分析ダッシュボード:</span>
+                       <br/>
+                       右側のパネルで「自チーム」と「全チーム平均」の傾向を切り替えて比較できます。
                     </div>
                   </div>
                 </div>
@@ -200,23 +198,15 @@ const App: React.FC = () => {
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="font-bold text-lg text-slate-800 mb-3 flex items-center gap-2">
                     <Calculator className="w-5 h-5 text-indigo-600" />
-                    PEV (貢献度) の計算ロジック
+                    PEV (貢献度) の計算ロジック (v2.0)
                 </h3>
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm space-y-3">
                     <p className="font-mono bg-white p-3 border border-slate-300 rounded text-center font-bold text-slate-700 overflow-x-auto whitespace-nowrap">
-                    PEV = 得点 + (プレー後の期待値 - プレー前の期待値) - リスク補正
+                    PEV = 得点 + (After RE - Before RE) - リスク
                     </p>
                     <div className="text-slate-600 space-y-2">
-                    <p><span className="font-bold text-slate-700">期待値 (RE24):</span> その状況（アウト・走者）からイニング終了までに平均何点入るかという統計的数値です。</p>
-                    <p><span className="font-bold text-slate-700">仕組み:</span> 状況を「良くした（ヒット、進塁、得点）」ならプラス、「悪くした（アウト）」ならマイナスになります。</p>
-                    <div className="bg-white p-3 rounded border border-slate-100">
-                        <span className="block text-xs font-bold text-slate-500 mb-1">リスク補正パラメータ:</span>
-                        <ul className="list-disc list-inside text-xs text-slate-600 space-y-1">
-                            <li><span className="font-bold text-red-500">三振: -0.2 pt</span> (進塁打の可能性がないためペナルティ)</li>
-                            <li><span className="font-bold text-red-500">併殺: -0.5 pt</span> (チャンスを大きく潰すため重いペナルティ)</li>
-                            <li><span className="font-bold text-blue-500">失策誘発: +0.3 pt</span> (強い打球等へのボーナス)</li>
-                        </ul>
-                    </div>
+                    <p><span className="font-bold text-slate-700">カウント別RE:</span> ボールが増えると期待値UP(+0.03〜)、ストライクが増えると期待値DOWN(-0.04〜)として計算します。</p>
+                    <p>例：無死1塁(RE 0.85)からボールを見送って1-0(RE 0.88)になった場合、<span className="font-bold text-blue-600">+0.03の貢献</span>となります。</p>
                     </div>
                 </div>
               </div>

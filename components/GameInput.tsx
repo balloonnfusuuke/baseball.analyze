@@ -12,7 +12,7 @@ import FieldVisual from './FieldVisual';
 import { v4 as uuidv4 } from 'uuid';
 import { calculatePEV, generateStateId, getRunExpectancy } from '../services/strategyService';
 import StrategyDashboard from './StrategyDashboard';
-import { Plus, X, RotateCcw } from 'lucide-react';
+import { Plus, X, RotateCcw, TrendingUp, Edit2, Hash } from 'lucide-react';
 
 interface Props {
   onLogSave: (log: PlayLog) => void;
@@ -28,10 +28,18 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
   const [teams, setTeams] = useState<string[]>([]);
 
   // --- Game Data State ---
-  const [date] = useState(new Date().toISOString().split('T')[0]);
-  const [opponent, setOpponent] = useState('堺シュライクス');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Teams
+  const [visitorTeam, setVisitorTeam] = useState('堺シュライクス');
+  const [homeTeam, setHomeTeam] = useState('Wakayama Waves');
+
   const [inning, setInning] = useState(1);
   const [topBottom, setTopBottom] = useState<'表' | '裏'>('表');
+  
+  // Derived Offense/Defense
+  const offenseTeam = topBottom === '表' ? visitorTeam : homeTeam;
+  const defenseTeam = topBottom === '表' ? homeTeam : visitorTeam;
   
   // Situation
   const [outs, setOuts] = useState<0 | 1 | 2>(0);
@@ -47,6 +55,11 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
   const [runsScored, setRunsScored] = useState(0);
   const [nextOuts, setNextOuts] = useState<0 | 1 | 2 | 3>(0);
   const [nextRunners, setNextRunners] = useState<RunnerState>(RunnerState.NONE);
+  const [pitchCount, setPitchCount] = useState<number>(1);
+  
+  // New: Next Count State (for logging pitch results)
+  const [nextBalls, setNextBalls] = useState<0 | 1 | 2 | 3>(0);
+  const [nextStrikes, setNextStrikes] = useState<0 | 1 | 2>(0);
 
   const currentState: GameState = { 
     inning, 
@@ -54,10 +67,15 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
     outs, 
     runners, 
     scoreDiff, 
-    opponent,
+    opponent: defenseTeam,
+    offenseTeam,
+    defenseTeam,
     balls,
     strikes
   };
+
+  // Live RE Calculation
+  const currentRE = getRunExpectancy(outs, runners, balls, strikes);
 
   // Load Teams
   useEffect(() => {
@@ -65,11 +83,48 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
     if (savedTeams) {
       setTeams(JSON.parse(savedTeams));
     } else {
-      const defaults = ['堺シュライクス', '淡路島ウォリアーズ', '姫路イーグレッターズ', '兵庫ブレイバーズ', '大阪ゼロロクブルズ'];
+      const defaults = ['Wakayama Waves', '堺シュライクス', '淡路島ウォリアーズ', '姫路イーグレッターズ', '兵庫ブレイバーズ', '大阪ゼロロクブルズ'];
       setTeams(defaults);
       localStorage.setItem('waves_teams', JSON.stringify(defaults));
     }
   }, []);
+
+  const isPitchEvent = [ResultType.TAKE_BALL, ResultType.TAKE_STRIKE, ResultType.SWING_STRIKE, ResultType.FOUL].includes(resultType);
+
+  // Auto-calculate pitch count based on count + 1
+  // If user says "2 Balls 1 Strike", minimum pitches is 2+1+1(current) = 4.
+  useEffect(() => {
+    if (step === 1) {
+       if (isPitchEvent) {
+         setPitchCount(1);
+       } else {
+         // Auto-calc: Balls + Strikes + 1 (The final pitch)
+         // e.g. "2B1S -> Grounder" = 2+1+1 = 4 pitches min.
+         setPitchCount(balls + strikes + 1);
+       }
+    }
+  }, [balls, strikes, isPitchEvent, step]);
+
+  // Update Next Count automatically when ResultType changes OR when Current Count changes
+  useEffect(() => {
+    if (step === 1) {
+        if (resultType === ResultType.TAKE_BALL) {
+            setNextBalls(Math.min(3, balls + 1) as 0|1|2|3);
+            setNextStrikes(strikes);
+        } else if (resultType === ResultType.TAKE_STRIKE || resultType === ResultType.SWING_STRIKE || resultType === ResultType.FOUL) {
+            setNextBalls(balls);
+            setNextStrikes(Math.min(2, strikes + 1) as 0|1|2);
+            // Special case: Foul with 2 strikes stays 2 strikes
+            if (resultType === ResultType.FOUL && strikes === 2) {
+                setNextStrikes(2);
+            }
+        } else {
+            // Ball In Play / End of AB -> Reset for next batter
+            setNextBalls(0);
+            setNextStrikes(0);
+        }
+    }
+  }, [resultType, balls, strikes, step]);
 
   // --- Handlers ---
 
@@ -81,7 +136,6 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
     }
     const updated = [...teams, newTeamName];
     setTeams(updated);
-    setOpponent(newTeamName);
     localStorage.setItem('waves_teams', JSON.stringify(updated));
     setNewTeamName('');
     setShowTeamModal(false);
@@ -96,20 +150,32 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
   }
 
   const handleSituationSubmit = () => {
-    // Move to Result Entry
-    // Initialize "Next State" defaults based on current state (heuristic)
     setNextOuts(outs); 
     setNextRunners(runners);
+    // Initialize next count based on current
+    setNextBalls(balls);
+    setNextStrikes(strikes);
+    // Reset pitch count for new entry
+    setPitchCount(1);
     setStep(1);
   };
 
   const handleLogSubmit = () => {
     if (!selectedAction) return;
 
-    const currentRE = getRunExpectancy(outs, runners);
-    const nextRE = nextOuts === 3 ? 0 : getRunExpectancy(nextOuts, nextRunners); // 3 outs = 0 RE
+    const currentREVal = getRunExpectancy(outs, runners, balls, strikes);
+    const nextREVal = nextOuts === 3 ? 0 : getRunExpectancy(nextOuts, nextRunners, nextBalls, nextStrikes);
     
-    const pev = calculatePEV(runsScored, currentRE, nextOuts, nextRunners, resultType);
+    // Pass counts to PEV calculation
+    const pev = calculatePEV(
+        runsScored, 
+        currentREVal, 
+        nextOuts, 
+        nextRunners, 
+        resultType, 
+        nextBalls, 
+        nextStrikes
+    );
 
     const log: PlayLog = {
       id: uuidv4(),
@@ -121,15 +187,19 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
       runsScored,
       nextOuts,
       nextRunners,
-      currentRE,
-      nextRE,
-      pev
+      nextBalls, // Log the count state
+      nextStrikes,
+      pitchCount: pitchCount, // Log pitch count
+      currentRE: currentREVal,
+      nextRE: nextREVal,
+      pev,
+      offenseTeam,
+      defenseTeam
     };
 
     onLogSave(log);
     
-    // Reset for next play
-    // Automatically set current state to the "next state" of the previous play
+    // State Transition Logic
     if (nextOuts === 3) {
       setTopBottom(prev => prev === '表' ? '裏' : '表');
       if (topBottom === '裏') handleNextInning();
@@ -142,9 +212,11 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
     } else {
         setOuts(nextOuts as 0|1|2);
         setRunners(nextRunners);
-        // Reset Count for new batter/situation
-        setBalls(0);
-        setStrikes(0);
+        
+        // Critical: Update the main count state to the "Next Count" 
+        // This allows continuous pitch-by-pitch logging
+        setBalls(nextBalls);
+        setStrikes(nextStrikes);
     }
 
     setRunsScored(0);
@@ -195,39 +267,70 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
       <div className="lg:col-span-7 space-y-6">
         
         {/* Header / Game Info */}
-        <div className="bg-white p-4 rounded-xl shadow-sm flex flex-wrap gap-4 items-center justify-between">
-           <div className="flex items-center gap-2">
-             <input type="date" value={date} readOnly className="text-sm font-bold bg-slate-100 p-1 rounded" />
-             <span className="text-slate-400">vs</span>
-             <div className="flex items-center gap-1">
-               <div className="relative">
+        <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+           {/* Date & Matchup */}
+           <div className="flex flex-col gap-2 w-full sm:w-auto">
+             <input 
+               type="date" 
+               value={date} 
+               onChange={(e) => setDate(e.target.value)}
+               className="text-xs font-bold text-slate-400 bg-transparent outline-none w-fit" 
+             />
+             <div className="flex items-center gap-2 text-sm sm:text-base">
+               {/* Visitor Team (Top) */}
+               <div className={`relative ${topBottom === '表' ? 'opacity-100' : 'opacity-60'}`}>
+                 <span className={`absolute -top-3 left-0 text-[10px] font-bold ${topBottom === '表' ? 'text-blue-600' : 'text-slate-400'}`}>VISITOR (表)</span>
                  <select 
-                   value={opponent} 
-                   onChange={e => setOpponent(e.target.value)}
-                   className="font-bold border-b border-slate-300 focus:border-blue-500 outline-none w-40 bg-transparent py-1 cursor-pointer appearance-none" 
+                   value={visitorTeam} 
+                   onChange={e => setVisitorTeam(e.target.value)}
+                   className="font-bold border-b border-slate-300 focus:border-blue-500 outline-none bg-transparent py-1 cursor-pointer appearance-none pr-4 max-w-[120px] sm:max-w-[150px] truncate" 
                  >
                    {teams.map(t => <option key={t} value={t}>{t}</option>)}
                  </select>
-                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                 </div>
                </div>
+               
+               <span className="text-slate-300 font-light">vs</span>
+               
+               {/* Home Team (Bottom) */}
+               <div className={`relative ${topBottom === '裏' ? 'opacity-100' : 'opacity-60'}`}>
+                 <span className={`absolute -top-3 left-0 text-[10px] font-bold ${topBottom === '裏' ? 'text-red-600' : 'text-slate-400'}`}>HOME (裏)</span>
+                 <select 
+                   value={homeTeam} 
+                   onChange={e => setHomeTeam(e.target.value)}
+                   className="font-bold border-b border-slate-300 focus:border-red-500 outline-none bg-transparent py-1 cursor-pointer appearance-none pr-4 max-w-[120px] sm:max-w-[150px] truncate" 
+                 >
+                   {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                 </select>
+               </div>
+
                <button 
                  onClick={() => setShowTeamModal(true)} 
-                 className="p-1.5 rounded-full hover:bg-blue-50 text-blue-600 transition-colors"
+                 className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 transition-colors"
                  title="チームを追加"
                >
-                 <Plus size={16} />
+                 <Plus size={14} />
                </button>
              </div>
            </div>
-           <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
-              <button onClick={() => setInning(Math.max(1, inning-1))} className="px-3 py-1 text-sm font-bold text-slate-500 hover:bg-white rounded">-</button>
-              <span className="font-mono font-bold w-8 text-center">{inning}回</span>
-              <button onClick={() => setInning(inning+1)} className="px-3 py-1 text-sm font-bold text-slate-500 hover:bg-white rounded">+</button>
+
+           {/* Inning & Top/Bottom Toggle */}
+           <div className="flex items-center gap-2 bg-slate-100 rounded-lg p-1 self-end sm:self-center">
+              <button onClick={() => setInning(Math.max(1, inning-1))} className="px-3 py-1 text-sm font-bold text-slate-500 hover:bg-white rounded transition-colors">-</button>
+              <span className="font-mono font-bold w-12 text-center text-slate-700">{inning}回</span>
+              <button onClick={() => setInning(inning+1)} className="px-3 py-1 text-sm font-bold text-slate-500 hover:bg-white rounded transition-colors">+</button>
               <div className="w-px h-4 bg-slate-300 mx-1"></div>
-              <button onClick={() => setTopBottom('表')} className={`px-3 py-1 text-xs font-bold rounded ${topBottom === '表' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>表</button>
-              <button onClick={() => setTopBottom('裏')} className={`px-3 py-1 text-xs font-bold rounded ${topBottom === '裏' ? 'bg-red-600 text-white' : 'text-slate-500'}`}>裏</button>
+              <button 
+                onClick={() => setTopBottom('表')} 
+                className={`px-4 py-1 text-xs font-bold rounded transition-all ${topBottom === '表' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}
+              >
+                表
+              </button>
+              <button 
+                onClick={() => setTopBottom('裏')} 
+                className={`px-4 py-1 text-xs font-bold rounded transition-all ${topBottom === '裏' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}
+              >
+                裏
+              </button>
            </div>
         </div>
 
@@ -235,8 +338,19 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
         {step === 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-left-4 fade-in">
             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="font-bold text-slate-700">状況入力 (BEFORE)</h3>
-              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Phase 1</span>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-700">状況入力 (BEFORE)</h3>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${topBottom === '表' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                    攻撃: {offenseTeam}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-slate-500 flex items-center gap-1">
+                    <TrendingUp size={12} />
+                    RE: {currentRE.toFixed(3)}
+                </span>
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">Phase 1</span>
+              </div>
             </div>
             
             <div className="p-6 space-y-8">
@@ -314,7 +428,7 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
 
                     {/* Score Diff */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Score Diff (Self)</label>
+                      <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Score Diff (Offense)</label>
                       <div className="grid grid-cols-3 gap-2">
                         {Object.values(ScoreDiff).map(diff => (
                           <button
@@ -344,11 +458,79 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
         {step === 1 && (
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in slide-in-from-right-4 fade-in">
              <div className="bg-blue-50 px-4 py-2 border-b border-blue-100 flex justify-between items-center">
-               <h3 className="font-bold text-blue-900">結果入力 (AFTER)</h3>
+               <div>
+                  <h3 className="font-bold text-blue-900">結果入力 (AFTER)</h3>
+                  <div className="text-[10px] text-blue-700 flex gap-2 font-mono mt-0.5">
+                     <span>{inning}回{topBottom}</span>
+                     <span>{outs}死 {runners !== '000' && '走者有'}</span>
+                  </div>
+               </div>
                <button onClick={() => setStep(0)} className="text-xs text-blue-600 hover:underline">← 状況に戻る</button>
              </div>
 
              <div className="p-6 space-y-6">
+                
+                {/* BULLETIN MODE: Count & Pitch Correction */}
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-1 bg-amber-200 text-[10px] font-bold text-amber-800 rounded-bl">速報モード対応</div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-6">
+                        {/* Count Correction */}
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                    <Edit2 size={12} className="text-amber-600" />
+                                    カウント修正 (打席結果時点)
+                                </label>
+                            </div>
+                            <div className="flex items-center gap-3 bg-white p-2 rounded border border-amber-100">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-green-600 w-3">B</span>
+                                    <div className="flex gap-0.5">
+                                        {[0,1,2,3].map(b => (
+                                            <button 
+                                                key={b} 
+                                                onClick={() => setBalls(b as 0|1|2|3)}
+                                                className={`w-5 h-5 rounded text-[10px] font-bold transition-all ${balls === b ? 'bg-green-500 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                            >{b}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="w-px h-6 bg-slate-200"></div>
+                                <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-yellow-500 w-3">S</span>
+                                    <div className="flex gap-0.5">
+                                        {[0,1,2].map(s => (
+                                            <button 
+                                                key={s} 
+                                                onClick={() => setStrikes(s as 0|1|2)}
+                                                className={`w-5 h-5 rounded text-[10px] font-bold transition-all ${strikes === s ? 'bg-yellow-400 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                            >{s}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Pitch Count Input */}
+                        <div className="flex-none w-full md:w-auto">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-2">
+                                <Hash size={12} className="text-amber-600" />
+                                投球数 (Pitch Count)
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setPitchCount(Math.max(1, pitchCount - 1))} className="w-8 h-8 rounded bg-white border border-amber-200 text-amber-700 font-bold hover:bg-amber-100">-</button>
+                                <div className="w-12 h-8 bg-white border border-amber-200 rounded flex items-center justify-center font-bold text-slate-700">
+                                    {pitchCount}
+                                </div>
+                                <button onClick={() => setPitchCount(pitchCount + 1)} className="w-8 h-8 rounded bg-white border border-amber-200 text-amber-700 font-bold hover:bg-amber-100">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-amber-700 mt-2 opacity-80">
+                        ※カウントを入力すると最低投球数（ボール+ストライク+1）が自動入力されます。ファウルで粘った場合などは＋で調整してください。
+                    </p>
+                </div>
+
                 {/* Action Selection */}
                 <div>
                    <label className="block text-xs font-bold text-slate-400 mb-2">選択した作戦</label>
@@ -371,31 +553,73 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
                    {/* Result Type & Score */}
                    <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-bold text-slate-400 mb-2">打撃結果</label>
+                        <label className="block text-xs font-bold text-slate-400 mb-2">結果タイプ</label>
                         <select 
                           className="w-full p-2 bg-slate-50 border border-slate-200 rounded font-medium"
                           value={resultType}
                           onChange={(e) => setResultType(e.target.value as ResultType)}
                         >
-                          {Object.values(ResultType).map(t => <option key={t} value={t}>{t}</option>)}
+                          <optgroup label="打席完了">
+                             {Object.values(ResultType).filter(t => !['ボール(見送)', 'ストライク(見送)', '空振り', 'ファウル'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
+                          </optgroup>
+                          <optgroup label="1球ごと(待球など)">
+                             {Object.values(ResultType).filter(t => ['ボール(見送)', 'ストライク(見送)', '空振り', 'ファウル'].includes(t)).map(t => <option key={t} value={t}>{t}</option>)}
+                          </optgroup>
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-400 mb-2">得点 (このプレーで)</label>
-                        <div className="flex gap-2">
-                           {[0,1,2,3,4].map(r => (
-                             <button 
-                                key={r} 
-                                onClick={() => setRunsScored(r)}
-                                className={`w-10 h-10 rounded font-bold ${runsScored === r ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-500'}`}
-                             >{r}</button>
-                           ))}
+
+                      {/* Next Count Display/Edit */}
+                      {isPitchEvent && (
+                        <div className="bg-indigo-50 p-3 rounded border border-indigo-100">
+                           <label className="block text-xs font-bold text-indigo-800 mb-2">次のカウント (結果/AFTER)</label>
+                           <div className="flex gap-4">
+                               <div className="flex items-center gap-2">
+                                   <span className="text-sm font-bold text-green-600">B</span>
+                                   <div className="flex gap-1">
+                                       {[0,1,2,3].map(b => (
+                                           <button 
+                                              key={b} 
+                                              onClick={() => setNextBalls(b as 0|1|2|3)}
+                                              className={`w-6 h-6 rounded border text-xs font-bold ${nextBalls === b ? 'bg-green-500 text-white border-green-600' : 'bg-white text-slate-400'}`}
+                                           >{b}</button>
+                                       ))}
+                                   </div>
+                               </div>
+                               <div className="flex items-center gap-2">
+                                   <span className="text-sm font-bold text-yellow-500">S</span>
+                                   <div className="flex gap-1">
+                                       {[0,1,2].map(s => (
+                                           <button 
+                                              key={s} 
+                                              onClick={() => setNextStrikes(s as 0|1|2)}
+                                              className={`w-6 h-6 rounded border text-xs font-bold ${nextStrikes === s ? 'bg-yellow-400 text-white border-yellow-500' : 'bg-white text-slate-400'}`}
+                                           >{s}</button>
+                                       ))}
+                                   </div>
+                               </div>
+                           </div>
                         </div>
-                      </div>
+                      )}
+
+                      {!isPitchEvent && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 mb-2">得点 (このプレーで)</label>
+                            <div className="flex gap-2">
+                            {[0,1,2,3,4].map(r => (
+                                <button 
+                                    key={r} 
+                                    onClick={() => setRunsScored(r)}
+                                    className={`w-10 h-10 rounded font-bold ${runsScored === r ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-500'}`}
+                                >{r}</button>
+                            ))}
+                            </div>
+                        </div>
+                      )}
                    </div>
 
                    {/* Next State */}
                    <div className="space-y-4">
+                      {/* Only show Next Outs/Runners if it's NOT a simple pitch event, OR allow editing if something weird happened */}
                       <div>
                          <label className="block text-xs font-bold text-slate-400 mb-2">次のアウト数</label>
                          <div className="flex gap-2">
@@ -447,6 +671,14 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
                     <div className="flex justify-between font-bold text-slate-700 mb-1">
                        <span>{log.gameState.inning}回{log.gameState.topBottom} {log.gameState.outs}アウト {log.gameState.scoreDiff}</span>
                        <span className={log.pev >= 0 ? 'text-blue-600' : 'text-red-500'}>PEV: {log.pev.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-500 mb-1">
+                       <span>{log.offenseTeam || 'Unknown'} 攻撃</span>
+                       {/* Show Count Detail */}
+                       <span className="font-mono text-[10px] bg-slate-100 px-1 rounded">
+                           {log.gameState.balls}-{log.gameState.strikes} → {log.nextBalls}-{log.nextStrikes}
+                           {log.pitchCount && log.pitchCount > 1 && ` (${log.pitchCount}球)`}
+                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                        <span className="bg-white px-2 py-0.5 rounded border border-slate-200">{log.action}</span>

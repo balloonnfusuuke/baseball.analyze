@@ -1,3 +1,4 @@
+
 import { 
   GameState, 
   InningZone, 
@@ -8,7 +9,7 @@ import {
   ResultType,
   StrategyStat
 } from '../types';
-import { INITIAL_RE_MATRIX, RISK_PENALTIES } from '../constants';
+import { INITIAL_RE_MATRIX, COUNT_RE_ADJUSTMENTS, RISK_PENALTIES } from '../constants';
 import { GoogleGenAI } from "@google/genai";
 
 export const getInningZone = (inning: number): InningZone => {
@@ -23,9 +24,25 @@ export const generateStateId = (state: GameState): string => {
   return `${zone}_${state.scoreDiff}_${state.outs}_${state.runners}_${state.balls}-${state.strikes}`;
 };
 
-export const getRunExpectancy = (outs: number, runners: RunnerState): number => {
-  const key = `${outs}_${runners}`;
-  return INITIAL_RE_MATRIX[key] ?? 0;
+// Updated to accept count
+export const getRunExpectancy = (
+  outs: number, 
+  runners: RunnerState, 
+  balls: number = 0, 
+  strikes: number = 0
+): number => {
+  // If 3 outs, RE is 0 regardless of count
+  if (outs >= 3) return 0;
+
+  const baseKey = `${outs}_${runners}`;
+  const baseRE = INITIAL_RE_MATRIX[baseKey] ?? 0;
+  
+  // Apply count adjustment
+  const countKey = `${balls}-${strikes}`;
+  const adjustment = COUNT_RE_ADJUSTMENTS[countKey] ?? 0;
+
+  // Ensure RE doesn't go below 0
+  return Math.max(0, baseRE + adjustment);
 };
 
 export const calculatePEV = (
@@ -33,14 +50,36 @@ export const calculatePEV = (
   currentRE: number,
   nextOuts: number,
   nextRunners: RunnerState,
-  resultType: ResultType
+  resultType: ResultType,
+  nextBalls: number = 0,
+  nextStrikes: number = 0
 ): number => {
-  const nextRE = getRunExpectancy(nextOuts, nextRunners);
+  // Determine Next RE based on Next Outs, Next Runners AND Next Count
+  // If the AB ended (e.g. Hit/Out), the next count for the NEW batter starts at 0-0.
+  // BUT:
+  // - If it was a pitch event (Ball, Foul), the AB continues with the new count.
+  // - If it was a generic "Result" (Grounder), the AB is over.
+  
+  const isAbOver = [
+    ResultType.GROUNDER, ResultType.FLY, ResultType.LINER, 
+    ResultType.WALK, ResultType.STRIKEOUT, ResultType.ERROR, ResultType.HIT
+  ].includes(resultType);
+
+  let effectiveNextBalls = nextBalls;
+  let effectiveNextStrikes = nextStrikes;
+
+  if (isAbOver) {
+    // If AB is over, the "next state" RE is for a fresh batter (0-0)
+    effectiveNextBalls = 0;
+    effectiveNextStrikes = 0;
+  }
+
+  const nextRE = getRunExpectancy(nextOuts, nextRunners, effectiveNextBalls, effectiveNextStrikes);
   
   let riskAdjustment = 0;
-  // Simple heuristic for risk based on result type, 
-  // ideally this checks if the result *was* a double play, but we simplify based on type.
-  // In a real app, "isDoublePlay" would be an input boolean.
+  // Risk penalties
+  // Note: Since we now penalize strikes via RE reduction (e.g. 0-0 -> 0-1 drops RE),
+  // we can reduce the explicit STRIKEOUT penalty, or keep it as a "failure to put in play" penalty.
   if (resultType === ResultType.STRIKEOUT) riskAdjustment += RISK_PENALTIES.STRIKEOUT;
   if (resultType === ResultType.ERROR) riskAdjustment += RISK_PENALTIES.ERROR_INDUCED;
 
@@ -52,13 +91,15 @@ export const calculatePEV = (
 export const analyzeStrategies = (stateId: string, logs: PlayLog[]): StrategyStat[] => {
   const relevantLogs = logs.filter(log => log.stateId === stateId);
   
-  const map = new Map<ActionType, { totalPEV: number; count: number; successCount: number }>();
+  const map = new Map<ActionType, { totalPEV: number; count: number; successCount: number; totalPitches: number }>();
 
   relevantLogs.forEach(log => {
-    const current = map.get(log.action) || { totalPEV: 0, count: 0, successCount: 0 };
+    const current = map.get(log.action) || { totalPEV: 0, count: 0, successCount: 0, totalPitches: 0 };
     current.totalPEV += log.pev;
     current.count += 1;
     if (log.pev > 0) current.successCount += 1;
+    // Assume pitchCount 1 if undefined for backward compatibility or default
+    current.totalPitches += (log.pitchCount || 1);
     map.set(log.action, current);
   });
 
@@ -68,7 +109,8 @@ export const analyzeStrategies = (stateId: string, logs: PlayLog[]): StrategySta
       action: key,
       count: val.count,
       avgPEV: val.totalPEV / val.count,
-      successRate: val.successCount / val.count
+      successRate: val.successCount / val.count,
+      avgPitches: val.totalPitches / val.count
     });
   });
 
@@ -94,7 +136,7 @@ export const getAiAnalysis = async (
   `;
 
   const statsDesc = stats.map(s => 
-    `- Action: ${s.action}, Avg PEV: ${s.avgPEV.toFixed(3)}, Samples: ${s.count}`
+    `- Action: ${s.action}, Avg PEV: ${s.avgPEV.toFixed(3)}, Avg Pitches: ${s.avgPitches?.toFixed(1) || 'N/A'}, Samples: ${s.count}`
   ).join('\n');
 
   const prompt = `

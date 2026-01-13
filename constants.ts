@@ -1,8 +1,8 @@
+
 import { REMatrix, RunnerState } from './types';
 
 // Standard NPB/Independent League approximated RE Matrix (Base-Out Run Expectancy)
 // Key format: `${outs}_${runners}`
-// Runners are represented by RunnerState enum strings (e.g., "100" for 1st base)
 export const INITIAL_RE_MATRIX: REMatrix = {
   [`0_${RunnerState.NONE}`]: 0.48,
   [`0_${RunnerState.FIRST}`]: 0.85,
@@ -42,16 +42,31 @@ export const INITIAL_RE_MATRIX: REMatrix = {
   [`3_${RunnerState.FULL}`]: 0,
 };
 
+// Adjustments to RE based on Ball-Strike count.
+// Positive means batter advantage (RE increases), Negative means pitcher advantage.
+// Based on typical sabermetric weights (e.g., TangoTiger RE24 Count values).
+export const COUNT_RE_ADJUSTMENTS: Record<string, number> = {
+  '0-0': 0.00,
+  '1-0': 0.03,
+  '2-0': 0.09,
+  '3-0': 0.20, // Huge advantage
+  '0-1': -0.04,
+  '1-1': -0.02,
+  '2-1': 0.03,
+  '3-1': 0.13,
+  '0-2': -0.10, // Big disadvantage
+  '1-2': -0.08,
+  '2-2': -0.03,
+  '3-2': 0.06,  // Full count is slightly batter favored vs 0-0 due to walk chance
+};
+
 export const RISK_PENALTIES = {
   DOUBLE_PLAY: -0.5,
-  STRIKEOUT: -0.2,
-  ERROR_INDUCED: 0.3, // Bonus
+  STRIKEOUT: -0.15, // Reduced slightly since count tracking handles some of this penalty naturally
+  ERROR_INDUCED: 0.3,
 };
 
 export const MOCK_HISTORY = [
-    // Pre-populating some data for visualization
     { action: '強攻', pev: 0.38, runs: 0 },
-    { action: '強攻', pev: -0.1, runs: 0 },
-    { action: '送りバント', pev: -0.12, runs: 0 },
-    { action: '盗塁', pev: 0.5, runs: 1 },
+    { action: '待球', pev: 0.03, runs: 0 }, // Taking a ball
 ];
