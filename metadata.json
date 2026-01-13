@@ -1,0 +1,5 @@
+{
+  "name": "Wakayama Waves Strategy System",
+  "description": "A specialized strategic optimization system for the Wakayama Waves independent league baseball team. Focuses on Run Expectancy (RE) and Player Evaluation Value (PEV) to drive data-driven decision making.",
+  "requestFramePermissions": []
+}
