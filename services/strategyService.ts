@@ -135,20 +135,31 @@ export const getAiAnalysis = async (
     Count: ${gameState.balls} Balls, ${gameState.strikes} Strikes
   `;
 
+  // Calculate total samples to instruct AI on confidence level
+  const totalSamples = stats.reduce((sum, s) => sum + s.count, 0);
+
   const statsDesc = stats.map(s => 
     `- Action: ${s.action}, Avg PEV: ${s.avgPEV.toFixed(3)}, Avg Pitches: ${s.avgPitches?.toFixed(1) || 'N/A'}, Samples: ${s.count}`
   ).join('\n');
 
   const prompt = `
     You are the strategic AI coach for the Wakayama Waves independent league baseball team.
+    
     Current Situation:
     ${stateDesc}
 
-    Historical Data for this specific situation (Count included):
+    Historical Data (Team's actual results in this situation):
     ${statsDesc}
+    Total Samples: ${totalSamples}
 
-    Based on independent league tendencies (aggressive baserunning, variable defense) and the Run Expectancy data, provide a concise strategic recommendation in Japanese (under 200 characters). 
-    Consider the Ball/Strike count heavily in your advice (e.g., 3-0 "Green Light" vs 0-2 "Protect").
+    Task:
+    Provide a concise strategic recommendation in Japanese (under 200 characters).
+    
+    Guidelines:
+    1. If Total Samples is low (under 5), rely more on general baseball theory (Run Expectancy, Count theory) but mention the lack of data.
+    2. If Total Samples is high (over 10), rely heavily on the Historical Data. If a specific Action has high Avg PEV, recommend it strongly as a "Team Trend".
+    3. Always consider the Ball/Strike count (e.g., 3-0 "Green Light" vs 0-2 "Protect").
+    4. Focus on PEV (Player Evaluation Value) as the primary metric of success.
   `;
 
   try {

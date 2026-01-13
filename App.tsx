@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { PlayLog } from './types';
 import GameInput from './components/GameInput';
-import { Upload, Download, HelpCircle, X, MousePointerClick, ArrowRight, Save, Calculator } from 'lucide-react';
+import { Upload, Download, HelpCircle, X, Calculator, Database } from 'lucide-react';
+import { calculatePEV } from './services/strategyService';
 
 const App: React.FC = () => {
   const [history, setHistory] = useState<PlayLog[]>([]);
@@ -47,7 +48,6 @@ const App: React.FC = () => {
         if (typeof content === 'string') {
           const importedLogs = JSON.parse(content);
           if (Array.isArray(importedLogs)) {
-            // Confirm overwrite
             if (window.confirm(`現在のデータ（${history.length}件）を上書きして、ファイルから${importedLogs.length}件のデータを読み込みますか？`)) {
                 setHistory(importedLogs);
                 localStorage.setItem('waves_logs', JSON.stringify(importedLogs));
@@ -62,7 +62,7 @@ const App: React.FC = () => {
       }
     };
     reader.readAsText(file);
-    event.target.value = ''; // Reset input to allow selecting the same file again
+    event.target.value = ''; 
   };
 
   return (
@@ -72,29 +72,44 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-xl italic font-serif">W</div>
-             <h1 className="font-bold text-lg tracking-tight hidden sm:block">Wakayama Waves <span className="text-slate-400 font-normal">Strategy System</span></h1>
+             <div className="hidden sm:block">
+                <h1 className="font-bold text-lg tracking-tight leading-none">Wakayama Waves</h1>
+                <p className="text-[10px] text-slate-400 font-normal tracking-wider">STRATEGY OPTIMIZATION SYSTEM</p>
+             </div>
           </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setShowHelp(true)}
-              className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded border border-indigo-500 transition-colors flex items-center gap-2 font-bold shadow-sm"
-            >
-              <HelpCircle size={14} />
-              <span className="hidden sm:inline">使い方</span>
-            </button>
-            <div className="w-px h-6 bg-slate-700 mx-1 self-center"></div>
-            <label className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-700 transition-colors cursor-pointer flex items-center gap-2">
-              <Upload size={14} />
-              <span className="hidden sm:inline">Import</span>
-              <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-            </label>
-            <button 
-              onClick={handleExport}
-              className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-700 transition-colors flex items-center gap-2"
-            >
-              <Download size={14} />
-              <span className="hidden sm:inline">Export</span>
-            </button>
+
+          <div className="flex items-center gap-2 sm:gap-4">
+             {/* Total Logs Counter */}
+             <div className="hidden md:flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                <Database size={12} className="text-blue-400" />
+                <span className="text-xs text-slate-300">蓄積データ:</span>
+                <span className="text-sm font-bold text-white font-mono">{history.length}</span>
+                <span className="text-[10px] text-slate-500">件</span>
+             </div>
+
+             <div className="h-6 w-px bg-slate-700 hidden md:block"></div>
+
+             <div className="flex gap-2">
+                <button 
+                onClick={() => setShowHelp(true)}
+                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded border border-indigo-500 transition-colors flex items-center gap-2 font-bold shadow-sm"
+                >
+                <HelpCircle size={14} />
+                <span className="hidden sm:inline">使い方</span>
+                </button>
+                <label className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-700 transition-colors cursor-pointer flex items-center gap-2">
+                <Upload size={14} />
+                <span className="hidden sm:inline">Import</span>
+                <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+                <button 
+                onClick={handleExport}
+                className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded border border-slate-700 transition-colors flex items-center gap-2"
+                >
+                <Download size={14} />
+                <span className="hidden sm:inline">Export</span>
+                </button>
+            </div>
           </div>
         </div>
       </header>

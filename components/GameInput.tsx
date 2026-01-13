@@ -80,10 +80,22 @@ const GameInput: React.FC<Props> = ({ onLogSave, history }) => {
   // Load Teams
   useEffect(() => {
     const savedTeams = localStorage.getItem('waves_teams');
+    const defaults = ['Wakayama Waves', '堺シュライクス', '淡路島ウォリアーズ', '姫路イーグレッターズ', '兵庫ブレイバーズ', '大阪ゼロロクブルズ'];
+
     if (savedTeams) {
-      setTeams(JSON.parse(savedTeams));
+      try {
+        let parsed = JSON.parse(savedTeams);
+        // Ensure Wakayama Waves exists
+        if (!parsed.includes('Wakayama Waves')) {
+            parsed = ['Wakayama Waves', ...parsed];
+            localStorage.setItem('waves_teams', JSON.stringify(parsed));
+        }
+        setTeams(parsed);
+      } catch (e) {
+        setTeams(defaults);
+        localStorage.setItem('waves_teams', JSON.stringify(defaults));
+      }
     } else {
-      const defaults = ['Wakayama Waves', '堺シュライクス', '淡路島ウォリアーズ', '姫路イーグレッターズ', '兵庫ブレイバーズ', '大阪ゼロロクブルズ'];
       setTeams(defaults);
       localStorage.setItem('waves_teams', JSON.stringify(defaults));
     }
