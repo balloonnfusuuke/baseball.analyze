@@ -27,6 +27,14 @@ const App: React.FC = () => {
     localStorage.setItem('waves_logs', JSON.stringify(newHistory));
   };
 
+  const handleDeleteLog = (id: string) => {
+    // Removed duplicate confirmation here. 
+    // Validation/Confirmation should be handled by the UI component triggering the action.
+    const newHistory = history.filter(log => log.id !== id);
+    setHistory(newHistory);
+    localStorage.setItem('waves_logs', JSON.stringify(newHistory));
+  };
+
   const handleExport = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(history));
     const downloadAnchorNode = document.createElement('a');
@@ -71,8 +79,7 @@ const App: React.FC = () => {
       <header className="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-xl italic font-serif">W</div>
-             <div className="hidden sm:block">
+             <div>
                 <h1 className="font-bold text-lg tracking-tight leading-none">Wakayama Waves</h1>
                 <p className="text-[10px] text-slate-400 font-normal tracking-wider">STRATEGY OPTIMIZATION SYSTEM</p>
              </div>
@@ -217,11 +224,11 @@ const App: React.FC = () => {
                 </h3>
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm space-y-3">
                     <p className="font-mono bg-white p-3 border border-slate-300 rounded text-center font-bold text-slate-700 overflow-x-auto whitespace-nowrap">
-                    PEV = 得点 + (After RE - Before RE) - リスク
+                    PEV = 得点 + (After RE - Before RE) + リスク調整
                     </p>
                     <div className="text-slate-600 space-y-2">
-                    <p><span className="font-bold text-slate-700">カウント別RE:</span> ボールが増えると期待値UP(+0.03〜)、ストライクが増えると期待値DOWN(-0.04〜)として計算します。</p>
-                    <p>例：無死1塁(RE 0.85)からボールを見送って1-0(RE 0.88)になった場合、<span className="font-bold text-blue-600">+0.03の貢献</span>となります。</p>
+                    <p><span className="font-bold text-slate-700">カウント別RE:</span> ボールが増えると期待値UP、ストライクが増えると期待値DOWN。</p>
+                    <p><span className="font-bold text-slate-700">リスク調整:</span> 三振(-0.15)などのペナルティは正しくマイナスされます。</p>
                     </div>
                 </div>
               </div>
@@ -244,6 +251,7 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 py-6">
         <GameInput 
           onLogSave={handleSaveLog} 
+          onLogDelete={handleDeleteLog}
           history={history}
         />
       </main>

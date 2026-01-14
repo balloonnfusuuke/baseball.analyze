@@ -35,16 +35,41 @@ export enum ActionType {
 }
 
 export enum ResultType {
-  // Batted / Finished Events
+  // --- Hits ---
+  HOMERUN = '本塁打',
+  TRIPLE = '三塁打',
+  DOUBLE = '二塁打',
+  SINGLE = '単打',
+  HIT = '安打(その他)', // Legacy
+
+  // --- Outs (In Play) ---
   GROUNDER = '内野ゴロ',
   FLY = '外野フライ',
   LINER = 'ライナー',
-  WALK = '四球', // Ball 4
-  STRIKEOUT = '三振', // Strike 3
+  POP_FLY = '内野フライ', // New: Often worse than outfield fly
+  DOUBLE_PLAY = '併殺打', // New: High penalty
+  TRIPLE_PLAY = '三重殺', // New: Rare
+
+  // --- Sacrifices ---
+  SAC_BUNT = '犠打(バント)', // New
+  SAC_FLY = '犠飛', // New
+
+  // --- Free Bases ---
+  WALK = '四球', 
+  HIT_BY_PITCH = '死球', // New
+  INTENTIONAL_WALK = '敬遠', // New
+
+  // --- Strikeouts ---
+  STRIKEOUT = '三振(その他)', // Legacy
+  STRIKEOUT_SWINGING = '空振り三振', // New
+  STRIKEOUT_LOOKING = '見逃し三振', // New: Higher penalty
+  STRIKEOUT_UNCATCH = '振り逃げ', // New
+
+  // --- Errors / Mistakes ---
   ERROR = '失策',
-  HIT = '安打',
+  FIELDERS_CHOICE = '野選', // New
   
-  // Pitch Events (Continuing AB)
+  // --- Pitch Events (Continuing AB) ---
   TAKE_BALL = 'ボール(見送)',
   TAKE_STRIKE = 'ストライク(見送)',
   SWING_STRIKE = '空振り',

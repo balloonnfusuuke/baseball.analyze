@@ -61,9 +61,10 @@ export const COUNT_RE_ADJUSTMENTS: Record<string, number> = {
 };
 
 export const RISK_PENALTIES = {
-  DOUBLE_PLAY: -0.5,
-  STRIKEOUT: -0.15, // Reduced slightly since count tracking handles some of this penalty naturally
-  ERROR_INDUCED: 0.3,
+  DOUBLE_PLAY: -0.50, // Massive penalty for momentum killing
+  STRIKEOUT: -0.15, // Baseline
+  STRIKEOUT_LOOKING: -0.25, // Heavier penalty for passivity
+  ERROR_INDUCED: 0.30,
 };
 
 export const MOCK_HISTORY = [

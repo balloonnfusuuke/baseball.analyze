@@ -60,10 +60,14 @@ export const calculatePEV = (
   // - If it was a pitch event (Ball, Foul), the AB continues with the new count.
   // - If it was a generic "Result" (Grounder), the AB is over.
   
-  const isAbOver = [
-    ResultType.GROUNDER, ResultType.FLY, ResultType.LINER, 
-    ResultType.WALK, ResultType.STRIKEOUT, ResultType.ERROR, ResultType.HIT
+  // Pitch Events (Continuing AB)
+  const isPitchEvent = [
+    ResultType.TAKE_BALL, ResultType.TAKE_STRIKE, 
+    ResultType.SWING_STRIKE, ResultType.FOUL
   ].includes(resultType);
+
+  // If it's not a pitch event, it's a Finished AB Event
+  const isAbOver = !isPitchEvent;
 
   let effectiveNextBalls = nextBalls;
   let effectiveNextStrikes = nextStrikes;
@@ -77,14 +81,28 @@ export const calculatePEV = (
   const nextRE = getRunExpectancy(nextOuts, nextRunners, effectiveNextBalls, effectiveNextStrikes);
   
   let riskAdjustment = 0;
-  // Risk penalties
-  // Note: Since we now penalize strikes via RE reduction (e.g. 0-0 -> 0-1 drops RE),
-  // we can reduce the explicit STRIKEOUT penalty, or keep it as a "failure to put in play" penalty.
-  if (resultType === ResultType.STRIKEOUT) riskAdjustment += RISK_PENALTIES.STRIKEOUT;
-  if (resultType === ResultType.ERROR) riskAdjustment += RISK_PENALTIES.ERROR_INDUCED;
+  
+  // --- Risk / Strategy Adjustments ---
+  
+  // 1. Strikeouts
+  if (resultType === ResultType.STRIKEOUT_SWINGING || resultType === ResultType.STRIKEOUT) {
+      riskAdjustment += RISK_PENALTIES.STRIKEOUT;
+  } else if (resultType === ResultType.STRIKEOUT_LOOKING) {
+      riskAdjustment += RISK_PENALTIES.STRIKEOUT_LOOKING;
+  }
+  
+  // 2. Double Play
+  if (resultType === ResultType.DOUBLE_PLAY) {
+      riskAdjustment += RISK_PENALTIES.DOUBLE_PLAY;
+  }
+  
+  // 3. Errors (Bonus for making contact that caused error)
+  if (resultType === ResultType.ERROR) {
+      riskAdjustment += RISK_PENALTIES.ERROR_INDUCED;
+  }
 
-  // Basic Formula: PEV = Runs + (NextRE - CurrentRE) - Risk
-  return runsScored + (nextRE - currentRE) - riskAdjustment;
+  // Basic Formula: PEV = Runs + (NextRE - CurrentRE) + RiskAdjustment
+  return runsScored + (nextRE - currentRE) + riskAdjustment;
 };
 
 // Aggregates logs to find best strategies for a specific State ID
