@@ -1,8 +1,10 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
-import { PlayLog, StrategyStat, GameState } from '../types';
+import { PlayLog, StrategyStat, GameState, RunnerState } from '../types';
 import { analyzeStrategies, generateStateId, getAiAnalysis } from '../services/strategyService';
+import { INITIAL_RE_MATRIX, COUNT_RE_ADJUSTMENTS, RISK_PENALTIES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Loader2, Sparkles, Filter, TrendingUp, Activity, Target, Zap, BrainCircuit, Info, X, Calculator } from 'lucide-react';
+import { Loader2, Sparkles, Filter, TrendingUp, Activity, Target, Zap, BrainCircuit, Info, X, Calculator, Table2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   currentState: GameState;
@@ -25,6 +27,7 @@ const StrategyDashboard: React.FC<Props> = ({ currentState, logs }) => {
   const [loadingAi, setLoadingAi] = useState(false);
   const [scope, setScope] = useState<'ALL' | 'TEAM'>('TEAM');
   const [showPevInfo, setShowPevInfo] = useState(false);
+  const [infoTab, setInfoTab] = useState<'PEV' | 'RE'>('PEV');
 
   // 1. Filter logs based on scope (Team vs All)
   const filteredLogs = useMemo(() => {
@@ -134,47 +137,148 @@ const StrategyDashboard: React.FC<Props> = ({ currentState, logs }) => {
       {/* --- PEV INFO MODAL --- */}
       {showPevInfo && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
                     <h3 className="font-bold flex items-center gap-2">
                         <Calculator className="text-blue-400" size={20} />
-                        PEV指標の解説
+                        指標・計算ロジック
                     </h3>
                     <button onClick={() => setShowPevInfo(false)} className="text-slate-400 hover:text-white">
                         <X size={20} />
                     </button>
                 </div>
-                <div className="p-6 space-y-4 text-sm text-slate-700 leading-relaxed">
-                    <div>
-                        <h4 className="font-bold text-slate-900 mb-1 border-b pb-1">PEV (Player Evaluation Value) とは？</h4>
-                        <p>
-                            「そのプレーがどれだけ得点期待値を高めたか」を示す、チーム独自の貢献度指標です。
-                            打率や防御率といった「結果」だけでなく、<span className="font-bold text-blue-600">勝利へのプロセスの質</span>を評価するために設計されました。
-                        </p>
-                    </div>
-
-                    <div className="bg-slate-50 p-3 rounded border border-slate-200">
-                        <h4 className="font-bold text-slate-900 mb-2">計算式</h4>
-                        <code className="block bg-white p-2 rounded border border-slate-300 font-mono text-xs mb-2">
-                            PEV = 得点 + (直後のRE - 直前のRE) + 戦略調整
-                        </code>
-                        <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
-                            <li><span className="font-bold">RE (Run Expectancy):</span> 無死一塁なら約0.85点など、その状況から平均何点入るかという確率的期待値。</li>
-                            <li><span className="font-bold">戦略調整:</span> 三振(-0.15)などのペナルティ。</li>
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h4 className="font-bold text-slate-900 mb-1 border-b pb-1">プロ野球公式指標との関係</h4>
-                        <p>
-                            PEVのベースとなっているのは、MLBやNPBのセイバーメトリクスで標準的に使われる<span className="font-bold text-indigo-600">「RE24 (Run Expectancy 24)」</span>という指標です。
-                        </p>
-                        <p className="mt-2 text-xs bg-indigo-50 text-indigo-800 p-2 rounded">
-                            <span className="font-bold">違い:</span> 一般的なRE24は「結果（進塁したかどうか）」のみを見ますが、本システムのPEVは「進塁打の意図」や「三振の罪深さ」など、<span className="underline">チーム戦略に基づいた独自の重み付け</span>を加えています。
-                        </p>
-                    </div>
+                
+                {/* Tabs */}
+                <div className="flex border-b border-slate-200 shrink-0">
+                    <button 
+                       onClick={() => setInfoTab('PEV')}
+                       className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${infoTab === 'PEV' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        PEV解説
+                    </button>
+                    <button 
+                       onClick={() => setInfoTab('RE')}
+                       className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${infoTab === 'RE' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                    >
+                        RE算出表 (Matrix)
+                    </button>
                 </div>
-                <div className="p-4 bg-slate-50 border-t text-center">
+
+                <div className="p-6 overflow-y-auto">
+                   {infoTab === 'PEV' ? (
+                       <div className="space-y-6 text-sm text-slate-700 leading-relaxed">
+                            <div>
+                                <h4 className="font-bold text-slate-900 mb-1 border-b pb-1">PEV (Player Evaluation Value) とは？</h4>
+                                <p>
+                                    「そのプレーがどれだけ得点期待値を高めたか」を示す、チーム独自の貢献度指標です。
+                                    打率や防御率といった「結果」だけでなく、<span className="font-bold text-blue-600">勝利へのプロセスの質</span>を評価するために設計されました。
+                                </p>
+                            </div>
+
+                            <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                                <h4 className="font-bold text-slate-900 mb-2">計算式</h4>
+                                <code className="block bg-white p-2 rounded border border-slate-300 font-mono text-xs mb-2">
+                                    PEV = 得点 + (直後のRE - 直前のRE) + 戦略調整
+                                </code>
+                                <ul className="list-disc list-inside space-y-1 text-xs text-slate-600">
+                                    <li><span className="font-bold">RE (Run Expectancy):</span> 無死一塁なら約0.85点など、その状況から平均何点入るかという確率的期待値。</li>
+                                    <li><span className="font-bold">戦略調整:</span> 三振や併殺など、得点期待値外の「流れ」へのペナルティ。</li>
+                                </ul>
+                            </div>
+
+                            {/* Risk Penalties Table */}
+                            <div>
+                                <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-1">
+                                    <AlertTriangle size={14} className="text-amber-500" /> 戦略調整・ペナルティ値
+                                </h4>
+                                <div className="overflow-x-auto border rounded border-slate-200">
+                                   <table className="w-full text-xs text-left">
+                                       <thead className="bg-slate-100 font-bold text-slate-600">
+                                           <tr>
+                                               <th className="p-2 whitespace-nowrap">イベント</th>
+                                               <th className="p-2 whitespace-nowrap">調整値</th>
+                                               <th className="p-2 whitespace-nowrap">意図</th>
+                                           </tr>
+                                       </thead>
+                                       <tbody className="divide-y divide-slate-100">
+                                            <tr>
+                                                <td className="p-2 font-bold">見逃し三振</td>
+                                                <td className="p-2 text-red-600 font-bold">{RISK_PENALTIES.STRIKEOUT_LOOKING.toFixed(2)}</td>
+                                                <td className="p-2 text-slate-500">消極性への重いペナルティ</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="p-2 font-bold">空振り三振</td>
+                                                <td className="p-2 text-red-600 font-bold">{RISK_PENALTIES.STRIKEOUT.toFixed(2)}</td>
+                                                <td className="p-2 text-slate-500">進塁なしの基本ペナルティ</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="p-2 font-bold">併殺打</td>
+                                                <td className="p-2 text-red-600 font-bold">{RISK_PENALTIES.DOUBLE_PLAY.toFixed(2)}</td>
+                                                <td className="p-2 text-slate-500">好機逸失への最大罰則</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="p-2 font-bold">相手失策誘発</td>
+                                                <td className="p-2 text-blue-600 font-bold">+{RISK_PENALTIES.ERROR_INDUCED.toFixed(2)}</td>
+                                                <td className="p-2 text-slate-500">強い打球/プレッシャー評価</td>
+                                            </tr>
+                                       </tbody>
+                                   </table>
+                                </div>
+                            </div>
+                        </div>
+                   ) : (
+                       <div className="space-y-6 text-sm text-slate-700">
+                           <div className="bg-blue-50 p-3 rounded text-blue-900 text-xs">
+                               <span className="font-bold">RE算出式:</span> <br/>
+                               RE = [基礎RE (走者・アウト)] + [カウント補正 (ボール・ストライク)]
+                           </div>
+
+                           <div>
+                               <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-1">
+                                   <Table2 size={14} /> 基礎REマトリクス (点)
+                               </h4>
+                               <div className="overflow-x-auto border rounded border-slate-200">
+                                   <table className="w-full text-xs text-center">
+                                       <thead className="bg-slate-100 font-bold text-slate-600">
+                                           <tr>
+                                               <th className="p-2 text-left">走者 \ アウト</th>
+                                               <th>0死</th>
+                                               <th>1死</th>
+                                               <th>2死</th>
+                                           </tr>
+                                       </thead>
+                                       <tbody className="divide-y divide-slate-100">
+                                           {[RunnerState.NONE, RunnerState.FIRST, RunnerState.SECOND, RunnerState.THIRD, RunnerState.FIRST_SECOND, RunnerState.FIRST_THIRD, RunnerState.SECOND_THIRD, RunnerState.FULL].map(r => (
+                                               <tr key={r}>
+                                                   <td className="p-2 font-bold text-left bg-slate-50">{r}</td>
+                                                   <td>{INITIAL_RE_MATRIX[`0_${r}`]?.toFixed(2)}</td>
+                                                   <td>{INITIAL_RE_MATRIX[`1_${r}`]?.toFixed(2)}</td>
+                                                   <td>{INITIAL_RE_MATRIX[`2_${r}`]?.toFixed(2)}</td>
+                                               </tr>
+                                           ))}
+                                       </tbody>
+                                   </table>
+                               </div>
+                           </div>
+
+                           <div>
+                               <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-1">
+                                   <Activity size={14} /> カウント補正 (点)
+                               </h4>
+                               <div className="grid grid-cols-3 gap-2 text-xs">
+                                   {Object.entries(COUNT_RE_ADJUSTMENTS).sort().map(([k, v]) => (
+                                       <div key={k} className={`p-1.5 rounded text-center border font-mono font-bold ${v > 0 ? 'bg-blue-50 border-blue-100 text-blue-700' : v < 0 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                                           {k}: {v > 0 ? '+' : ''}{v.toFixed(2)}
+                                       </div>
+                                   ))}
+                               </div>
+                               <p className="text-[10px] text-slate-400 mt-1">※ボールが増えると打者有利(+), ストライクが増えると投手有利(-)</p>
+                           </div>
+                       </div>
+                   )}
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t text-center shrink-0">
                     <button onClick={() => setShowPevInfo(false)} className="px-6 py-2 bg-slate-800 text-white font-bold rounded hover:bg-slate-700">
                         閉じる
                     </button>
@@ -189,7 +293,7 @@ const StrategyDashboard: React.FC<Props> = ({ currentState, logs }) => {
          <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group">
              {/* Info Button */}
              <button 
-                onClick={() => setShowPevInfo(true)}
+                onClick={() => { setShowPevInfo(true); setInfoTab('PEV'); }}
                 className="absolute top-2 right-2 text-slate-300 hover:text-blue-600 transition-colors z-10 p-1"
                 title="PEVとは？"
              >

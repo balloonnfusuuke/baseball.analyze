@@ -764,22 +764,33 @@ const GameInput: React.FC<Props> = ({ onLogSave, onLogDelete, history }) => {
          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-[400px] overflow-y-auto">
             <h3 className="font-bold text-slate-700 mb-4 sticky top-0 bg-white pb-2 border-b">直近のログ</h3>
             <div className="space-y-3">
-               {history.slice().reverse().map((log, index) => (
+               {history.slice().reverse().map((log, index) => {
+                 const deltaRE = log.nextRE - log.currentRE;
+                 const risk = log.pev - log.runsScored - deltaRE;
+                 return (
                  <div key={log.id} className="text-xs p-3 bg-slate-50 rounded border border-slate-100 relative group">
                     {/* Delete Button - Only for the most recent log (top of the list) */}
                     {index === 0 && (
                         <button 
-                            onClick={() => handleUndo(log)}
-                            className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleUndo(log);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors z-20 cursor-pointer"
                             title="このログを取り消し(Undo)"
                         >
                             <Trash2 size={14} />
                         </button>
                     )}
 
-                    <div className="flex justify-between font-bold text-slate-700 mb-1 pr-6">
-                       <span>{log.gameState.inning}回{log.gameState.topBottom} {log.gameState.outs}アウト {log.gameState.scoreDiff}</span>
-                       <span className={log.pev >= 0 ? 'text-blue-600' : 'text-red-500'}>PEV: {log.pev.toFixed(2)}</span>
+                    <div className="flex justify-between font-bold text-slate-700 mb-1 pr-6 items-start">
+                       <span className="mt-0.5">{log.gameState.inning}回{log.gameState.topBottom} {log.gameState.outs}アウト {log.gameState.scoreDiff}</span>
+                       <div className="text-right">
+                           <span className={`block text-sm ${log.pev >= 0 ? 'text-blue-600' : 'text-red-500'}`}>PEV: {log.pev.toFixed(2)}</span>
+                           <div className="text-[10px] text-slate-400 font-mono tracking-tighter whitespace-nowrap" title="PEV = 得点 + (AfterRE - BeforeRE) + 戦略調整">
+                              {log.runsScored} + ({log.nextRE.toFixed(2)} - {log.currentRE.toFixed(2)}) {risk >= 0 ? '+' : ''}{risk.toFixed(2)}
+                           </div>
+                       </div>
                     </div>
                     <div className="flex justify-between items-center text-slate-500 mb-1">
                        <span>{log.offenseTeam || 'Unknown'} 攻撃</span>
@@ -794,7 +805,7 @@ const GameInput: React.FC<Props> = ({ onLogSave, onLogDelete, history }) => {
                        <span className="text-slate-500">→ {log.resultType} ({log.runsScored}点)</span>
                     </div>
                  </div>
-               ))}
+               )})}
                {history.length === 0 && <div className="text-slate-400 text-center mt-10">記録なし</div>}
             </div>
          </div>
